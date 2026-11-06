@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>バネ-質量系物理アニメーター</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-950 text-white min-h-screen">
+<div class="max-w-4xl mx-auto p-4">
+  <h1 class="text-2xl font-bold text-center mb-1 text-teal-400">バネ-質量系物理アニメーター</h1>
+  <p class="text-center text-gray-400 text-sm mb-4">共鳴・減衰・強制振動を体感する物理シミュレーター</p>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+    <div class="bg-gray-800 rounded-xl p-3 text-center">
+      <div class="text-gray-400 text-xs mb-1">変位 x</div>
+      <div id="displacement" class="text-2xl font-bold text-teal-400">0.00</div>
+      <div class="text-gray-400 text-xs">m</div>
+    </div>
+    <div class="bg-gray-800 rounded-xl p-3 text-center">
+      <div class="text-gray-400 text-xs mb-1">速度 v</div>
+      <div id="velocity" class="text-2xl font-bold text-blue-400">0.00</div>
+      <div class="text-gray-400 text-xs">m/s</div>
+    </div>
+    <div class="bg-gray-800 rounded-xl p-3 text-center">
+      <div class="text-gray-400 text-xs mb-1">エネルギー</div>
+      <div id="energy" class="text-2xl font-bold text-yellow-400">0.00</div>
+      <div class="text-gray-400 text-xs">J</div>
+    </div>
+    <div class="bg-gray-800 rounded-xl p-3 text-center">
+      <div class="text-gray-400 text-xs mb-1">減衰状態</div>
+      <div id="dampingState" class="text-sm font-bold text-green-400 mt-2">-</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+    <div>
+      <canvas id="springCanvas" width="250" height="380" class="rounded-xl w-full" style="max-height:380px" aria-label="バネ-質量系アニメーション"></canvas>
+    </div>
+    <div>
+      <canvas id="graphCanvas" width="380" height="200" class="rounded-xl w-full mb-3" aria-label="変位時系列グラフ"></canvas>
+      <div class="bg-gray-800 rounded-xl p-3">
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+          <div>
+            <label class="flex justify-between text-xs text-gray-300 mb-1">
+              <span>バネ定数 k</span><span id="kDispVal" class="text-teal-400 font-bold">5.0</span>
+            </label>
+            <input id="sliderK" type="range" min="1" max="50" value="10" class="w-full accent-teal-400" aria-label="バネ定数k">
+          </div>
+          <div>
+            <label class="flex justify-between text-xs text-gray-300 mb-1">
+              <span>質量 m</span><span id="mDispVal" class="text-teal-400 font-bold">1.0</span>
+            </label>
+            <input id="sliderM" type="range" min="1" max="20" value="2" class="w-full accent-teal-400" aria-label="質量m">
+          </div>
+          <div>
+            <label class="flex justify-between text-xs text-gray-300 mb-1">
+              <span>減衰係数 b</span><span id="bDispVal" class="text-teal-400 font-bold">0.5</span>
+            </label>
+            <input id="sliderB" type="range" min="0" max="50" value="2" class="w-full accent-teal-400" aria-label="減衰係数b">
+          </div>
+          <div>
+            <label class="flex justify-between text-xs text-gray-300 mb-1">
+              <span>強制振動 ω</span><span id="omegaDispVal" class="text-teal-400 font-bold">0.0</span>
+            </label>
+            <input id="sliderOmega" type="range" min="0" max="50" value="0" class="w-full accent-teal-400" aria-label="強制振動周波数">
+          </div>
+          <div>
+            <label class="flex justify-between text-xs text-gray-300 mb-1">
+              <span>強制振動振幅 F</span><span id="fDispVal" class="text-teal-400 font-bold">0.0</span>
+            </label>
+            <input id="sliderF" type="range" min="0" max="20" value="0" class="w-full accent-teal-400" aria-label="強制振動振幅">
+          </div>
+          <div>
+            <label class="flex justify-between text-xs text-gray-300 mb-1">
+              <span>初期変位</span><span id="x0DispVal" class="text-teal-400 font-bold">1.0</span>
+            </label>
+            <input id="sliderX0" type="range" min="-30" max="30" value="20" class="w-full accent-teal-400" aria-label="初期変位">
+          </div>
+        </div>
+        <div class="flex gap-2 mt-3">
+          <button id="btnPlay" class="flex-1 bg-teal-700 hover:bg-teal-600 py-2 rounded text-sm font-semibold transition-colors" aria-label="開始/停止">▶ 開始</button>
+          <button id="btnReset" class="flex-1 bg-gray-600 hover:bg-gray-500 py-2 rounded text-sm transition-colors" aria-label="リセット">リセット</button>
+        </div>
+        <div id="resonanceAlert" class="hidden text-center text-red-400 text-xs font-bold mt-2 animate-pulse">⚡ 共鳴中！</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-gray-800 rounded-xl p-3">
+    <div class="text-xs text-gray-400">
+      <strong class="text-gray-300">方程式:</strong> x'' = -(k/m)x - (b/m)x' + F·cos(ωt)
+      &nbsp;|&nbsp; 固有角周波数 ω₀ = √(k/m) &nbsp;|&nbsp; 臨界減衰 b_c = 2√(km)
+    </div>
+  </div>
+</div>
+
+<script>
+const springCv = document.getElementById('springCanvas');
+const ctxS = springCv.getContext('2d');
+const graphCv = document.getElementById('graphCanvas');
+const ctxG = graphCv.getContext('2d');
+const SW = springCv.width, SH = springCv.height;
+const GW = graphCv.width, GH = graphCv.height;
+
+let x = 1.0, v = 0.0, t = 0.0;
+let running = false;
+let rafId = null;
+let history = [];
+const HISTORY_MAX = GW;
+let forcingPhase = 0;
+
+function getParams() {
+  const k = parseInt(document.getElementById('sliderK').value) / 2;
+  const m = parseInt(document.getElementById('sliderM').value) / 2;
+  const b = parseInt(document.getElementById('sliderB').value) / 10;
+  const omega = parseInt(document.getElementById('sliderOmega').value) / 10;
+  const F = parseInt(document.getElementById('sliderF').value) / 2;
+  const x0 = parseInt(document.getElementById('sliderX0').value) / 10;
+  return {k, m, b, omega, F, x0};
+}
+
+function updateLabels() {
+  const p = getParams();
+  document.getElementById('kDispVal').textContent = p.k.toFixed(1);
+  document.getElementById('mDispVal').textContent = p.m.toFixed(1);
+  document.getElementById('bDispVal').textContent = p.b.toFixed(1);
+  document.getElementById('omegaDispVal').textContent = p.omega.toFixed(1);
+  document.getElementById('fDispVal').textContent = p.F.toFixed(1);
+  document.getElementById('x0DispVal').textContent = p.x0.toFixed(1);
+
+  const omega0 = Math.sqrt(p.k/p.m);
+  const bc = 2*Math.sqrt(p.k*p.m);
+  const dampEl = document.getElementById('dampingState');
+  if (p.b > bc) { dampEl.textContent = '過減衰'; dampEl.className = 'text-sm font-bold text-red-400 mt-2'; }
+  else if (Math.abs(p.b - bc) < 0.3) { dampEl.textContent = '臨界減衰'; dampEl.className = 'text-sm font-bold text-yellow-400 mt-2'; }
+  else { dampEl.textContent = '不足減衰（振動）'; dampEl.className = 'text-sm font-bold text-green-400 mt-2'; }
+
+  const resonance = p.F > 0 && Math.abs(p.omega - omega0) < 0.3;
+  document.getElementById('resonanceAlert').classList.toggle('hidden', !resonance);
+}
+
+function resetSim() {
+  const p = getParams();
+  x = p.x0;
+  v = 0;
+  t = 0;
+  forcingPhase = 0;
+  history = [];
+  updateLabels();
+}
+
+function step() {
+  const p = getParams();
+  const dt = 0.016;
+  const steps = 3;
+
+  for (let s = 0; s < steps; s++) {
+    const F_ext = p.F * Math.cos(p.omega * forcingPhase);
+    const a = -(p.k/p.m)*x - (p.b/p.m)*v + F_ext/p.m;
+    v += a * dt;
+    x += v * dt;
+    t += dt;
+    forcingPhase += dt;
+    if (Math.abs(x) > 15) { x = Math.sign(x)*15; v *= -0.5; }
+  }
+  history.push(x);
+  if (history.length > HISTORY_MAX) history.shift();
+}
+
+function drawSpring() {
+  ctxS.clearRect(0,0,SW,SH);
+  ctxS.fillStyle = '#0a0f1a';
+  ctxS.fillRect(0,0,SW,SH);
+
+  const cx = SW/2;
+  const equilibrium = 80;
+  const massY = equilibrium + x * 40;
+  const massR = 24;
+
+  // Ceiling
+  ctxS.fillStyle = '#374151';
+  ctxS.fillRect(cx-50, 20, 100, 8);
+
+  // Spring
+  const springTop = 28;
+  const springBot = massY - massR;
+  const coils = 12;
+  const springLen = springBot - springTop;
+  ctxS.beginPath();
+  ctxS.moveTo(cx, springTop);
+  for (let i = 0; i <= coils*2; i++) {
+    const yy = springTop + (i/(coils*2)) * springLen;
+    const xx = cx + (i%2===0?-1:1)*18;
+    ctxS.lineTo(xx, yy);
+  }
+  ctxS.lineTo(cx, springBot);
+  const p = getParams();
+  const omega0 = Math.sqrt(p.k/p.m);
+  const resonance = p.F > 0 && Math.abs(p.omega - omega0) < 0.3;
+  ctxS.strokeStyle = resonance ? '#ff4444' : '#5eead4';
+  ctxS.lineWidth = 2.5;
+  ctxS.stroke();
+
+  // Equilibrium line
+  ctxS.setLineDash([4,4]);
+  ctxS.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctxS.lineWidth = 1;
+  ctxS.beginPath();
+  ctxS.moveTo(cx-50, equilibrium+40);
+  ctxS.lineTo(cx+50, equilibrium+40);
+  ctxS.stroke();
+  ctxS.setLineDash([]);
+
+  // Mass
+  const massGrad = ctxS.createRadialGradient(cx-5, massY-5, 3, cx, massY, massR);
+  massGrad.addColorStop(0,'#5eead4');
+  massGrad.addColorStop(0.6,'#0d9488');
+  massGrad.addColorStop(1,'#042f2e');
+  ctxS.beginPath();
+  ctxS.arc(cx, massY, massR, 0, Math.PI*2);
+  ctxS.fillStyle = massGrad;
+  ctxS.fill();
+  ctxS.strokeStyle = '#5eead4';
+  ctxS.lineWidth = 2;
+  ctxS.stroke();
+
+  // m label
+  ctxS.fillStyle = 'white';
+  ctxS.font = 'bold 11px sans-serif';
+  ctxS.textAlign = 'center';
+  ctxS.textBaseline = 'middle';
+  ctxS.fillText('m', cx, massY);
+
+  // Force arrow (if forcing)
+  if (p.F > 0) {
+    const fForce = p.F * Math.cos(forcingPhase * p.omega);
+    const arrowLen = fForce * 20;
+    ctxS.strokeStyle = '#fbbf24';
+    ctxS.lineWidth = 3;
+    ctxS.beginPath();
+    ctxS.moveTo(cx, massY);
+    ctxS.lineTo(cx, massY + arrowLen);
+    ctxS.stroke();
+  }
+
+  // Info
+  ctxS.fillStyle = 'rgba(255,255,255,0.4)';
+  ctxS.font = '10px monospace';
+  ctxS.textAlign = 'left';
+  ctxS.textBaseline = 'top';
+  ctxS.fillText('ω₀='+omega0.toFixed(2), 5, SH-30);
+  ctxS.fillText('x='+x.toFixed(2), 5, SH-16);
+}
+
+function drawGraph() {
+  ctxG.clearRect(0,0,GW,GH);
+  ctxG.fillStyle = '#0a0f1a';
+  ctxG.fillRect(0,0,GW,GH);
+
+  // Grid
+  ctxG.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctxG.lineWidth = 1;
+  ctxG.beginPath();
+  ctxG.moveTo(0,GH/2); ctxG.lineTo(GW,GH/2);
+  ctxG.stroke();
+
+  // Labels
+  ctxG.fillStyle = 'rgba(255,255,255,0.3)';
+  ctxG.font = '9px sans-serif';
+  ctxG.textAlign = 'left';
+  ctxG.textBaseline = 'top';
+  ctxG.fillText('x(t)', 2, 2);
+  ctxG.fillText('+', 2, GH/2-16);
+  ctxG.fillText('−', 2, GH/2+4);
+
+  if (history.length < 2) return;
+  const maxX = Math.max(5, ...history.map(Math.abs));
+  ctxG.beginPath();
+  for (let i = 0; i < history.length; i++) {
+    const px = (i / HISTORY_MAX) * GW;
+    const py = GH/2 - (history[i]/maxX) * (GH/2 - 5);
+    if (i===0) ctxG.moveTo(px,py); else ctxG.lineTo(px,py);
+  }
+  ctxG.strokeStyle = '#2dd4bf';
+  ctxG.lineWidth = 1.5;
+  ctxG.stroke();
+
+  // Current energy
+  const p = getParams();
+  const ke = 0.5*p.m*v*v;
+  const pe = 0.5*p.k*x*x;
+  document.getElementById('displacement').textContent = x.toFixed(3);
+  document.getElementById('velocity').textContent = v.toFixed(3);
+  document.getElementById('energy').textContent = (ke+pe).toFixed(3);
+}
+
+function loop() {
+  if (running) step();
+  drawSpring();
+  drawGraph();
+  rafId = requestAnimationFrame(loop);
+}
+
+document.getElementById('btnPlay').addEventListener('click', function() {
+  running = !running;
+  this.textContent = running ? '⏸ 停止' : '▶ 開始';
+  this.className = running
+    ? 'flex-1 bg-red-700 hover:bg-red-600 py-2 rounded text-sm font-semibold transition-colors'
+    : 'flex-1 bg-teal-700 hover:bg-teal-600 py-2 rounded text-sm font-semibold transition-colors';
+  if (!rafId) loop();
+});
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  running = false;
+  document.getElementById('btnPlay').textContent = '▶ 開始';
+  document.getElementById('btnPlay').className = 'flex-1 bg-teal-700 hover:bg-teal-600 py-2 rounded text-sm font-semibold transition-colors';
+  resetSim();
+  if (!rafId) loop();
+  else { drawSpring(); drawGraph(); }
+});
+
+['sliderK','sliderM','sliderB','sliderOmega','sliderF','sliderX0'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateLabels);
+});
+
+// Save/restore
+const savedSpring = localStorage.getItem('spring_params');
+if (savedSpring) {
+  try {
+    const sp = JSON.parse(savedSpring);
+    Object.entries(sp).forEach(([k,v]) => {
+      const el = document.getElementById(k);
+      if (el) el.value = v;
+    });
+  } catch(e) {}
+}
+['sliderK','sliderM','sliderB','sliderOmega','sliderF','sliderX0'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    const vals = {};
+    ['sliderK','sliderM','sliderB','sliderOmega','sliderF','sliderX0'].forEach(k => {
+      vals[k] = document.getElementById(k).value;
+    });
+    localStorage.setItem('spring_params', JSON.stringify(vals));
+  });
+});
+
+resetSim();
+loop();
+</script>
+</body>
+</html>
